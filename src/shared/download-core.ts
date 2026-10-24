@@ -183,11 +183,43 @@ export const createDownloader = (deps: DownloaderDeps) => {
     return null;
   };
 
-  /** Where a tool is right now, without installing anything. */
+  /**
+   * Does this binary actually run? Bundled/system copies can be broken
+   * stubs — e.g. a Homebrew launcher script whose Python was removed, or an
+   * ffmpeg linked against Homebrew libraries that don't exist on this Mac.
+   */
+  const runsCache = new Map<string, boolean>();
+  const runs = (file: string, tool: Tool): boolean => {
+    const cached = runsCache.get(file);
+    if (cached !== undefined) return cached;
+    let ok = false;
+    try {
+      const result = child_process.spawnSync(file, [tool === "ffmpeg" || tool === "ffprobe" ? "-version" : "--version"], {
+        timeout: 20_000,
+        windowsHide: true,
+        stdio: "ignore",
+      });
+      ok = result.status === 0;
+    } catch (_) {}
+    runsCache.set(file, ok);
+    if (!ok) console.warn(`[Downloader] Ignoring broken ${tool} at ${file}`);
+    return ok;
+  };
+
+  /** Like findIn, but skips copies that don't run. */
+  const findWorking = (dirs: string[], tool: Tool): string | null => {
+    for (const dir of dirs) {
+      const candidate = path.join(dir, exe(tool));
+      if (isFile(candidate) && runs(candidate, tool)) return candidate;
+    }
+    return null;
+  };
+
+  /** Where a working copy of a tool is right now, without installing anything. */
   const findExisting = (tool: Tool): string | null =>
     findIn([managedBinDir()], tool) ||
-    findIn(deps.bundledBinDirs(), tool) ||
-    findIn(systemBinDirs(), tool);
+    findWorking(deps.bundledBinDirs(), tool) ||
+    findWorking(systemBinDirs(), tool);
 
   /* ─── Process runner (with cancellation) ─────────────────── */
 
@@ -498,9 +530,17 @@ export const createDownloader = (deps: DownloaderDeps) => {
 
     const job = (async () => {
       const managed = findIn([managedBinDir()], tool);
-      if (managed) return managed;
+      if (managed && runs(managed, tool)) return managed;
+      if (managed) {
+        // Corrupt or a copied stub — replace it with a fresh download.
+        try {
+          fs.unlinkSync(managed);
+        } catch (_) {}
+        runsCache.delete(managed);
+        return installTool(tool, onProgress);
+      }
 
-      const bundled = findIn(deps.bundledBinDirs(), tool);
+      const bundled = findWorking(deps.bundledBinDirs(), tool);
       if (tool === "yt-dlp") {
         // yt-dlp must be self-updatable, so it always lives in our data folder.
         if (bundled) {
@@ -510,14 +550,14 @@ export const createDownloader = (deps: DownloaderDeps) => {
         try {
           return await installTool(tool, onProgress);
         } catch (err) {
-          const system = findIn(systemBinDirs(), tool);
+          const system = findWorking(systemBinDirs(), tool);
           if (system) return system;
           throw err;
         }
       }
 
       if (bundled) return bundled;
-      const system = findIn(systemBinDirs(), tool);
+      const system = findWorking(systemBinDirs(), tool);
       if (system) return system;
       return installTool(tool, onProgress);
     })();
@@ -985,7 +1025,7 @@ export const createDownloader = (deps: DownloaderDeps) => {
     audioFormat: AudioFormat | null,
     onProgress?: ProgressFn
   ): Promise<string> => {
-    const label = "Trimming…";
+    const label = "Cutting clip…";
     onProgress?.({ percent: null, line: label });
     const tmp = await encode(
       ffmpeg,
@@ -1064,9 +1104,19 @@ export const createDownloader = (deps: DownloaderDeps) => {
     const workDir = path.join(request.outputDir, `.saucer-${Date.now()}`);
     fs.mkdirSync(workDir, { recursive: true });
 
+    const duration = request.duration ?? null;
     const start = request.trimStart ? parseTimecode(request.trimStart) : null;
     const end = request.trimEnd ? parseTimecode(request.trimEnd) : null;
-    const hasTrim = start !== null && end !== null && end > start;
+    // A "trim" that covers the whole video is just a normal download.
+    const coversEverything = duration !== null && start !== null && end !== null && start <= 0.05 && end >= duration - 0.5;
+    const hasTrim = start !== null && end !== null && end > start && !coversEverything;
+    // How to trim: yt-dlp's native downloader is ~15× faster than fetching a
+    // section through ffmpeg (and ffmpeg's frame-accurate cut re-encodes on
+    // the CPU), so normally download the whole file and cut it locally with
+    // the hardware encoder. Only fetch the section remotely when it's a small
+    // part of a long video.
+    const useSections =
+      hasTrim && duration !== null && duration > 15 * 60 && end! - start! < duration * 0.25;
     const trimSuffix = hasTrim
       ? ` (${request.trimStart!.replace(/:/g, "-")} to ${request.trimEnd!.replace(/:/g, "-")})`
       : "";
@@ -1116,8 +1166,17 @@ export const createDownloader = (deps: DownloaderDeps) => {
     // Map the first stream to 0–90% and anything after to 90–99%.
     let stream = 0;
     let lastPct = 0;
+    let clipping = false;
     const onLine = (line: string) => {
       if (!line.startsWith(PROGRESS_TAG)) {
+        // Section downloads run through ffmpeg, which reports `time=` instead.
+        const t = clipping ? line.match(/time=(\d+):(\d+):([\d.]+)/) : null;
+        if (t && hasTrim) {
+          const secs = +t[1] * 3600 + +t[2] * 60 + parseFloat(t[3]);
+          const pct = Math.min(99, (secs / (end! - start!)) * 100);
+          onProgress?.({ percent: pct, line: `Downloading clip… ${Math.floor(pct)}%` });
+          return;
+        }
         if (/^(WARNING|ERROR)/.test(line)) console.log("[yt-dlp]", line);
         return;
       }
@@ -1131,21 +1190,26 @@ export const createDownloader = (deps: DownloaderDeps) => {
       onProgress?.({ percent: overall, line: `Downloading ${what}… ${Math.floor(pct * 100)}%` });
     };
     const runOptions: RunOptions = { onLine, idleTimeoutMs: 180_000 };
-    const sectionArgs = hasTrim ? ["--download-sections", `*${start}-${end}`, "--force-keyframes-at-cuts"] : [];
+    const sectionArgs = useSections ? ["--download-sections", `*${start}-${end}`, "--force-keyframes-at-cuts"] : [];
     const unrecoverable = /sign in|logged-in|login|private|unsupported url|unavailable|not available in your/i;
 
     let result: RunResult | null = null;
-    let trimmedByYtDlp = hasTrim;
+    let trimmedByYtDlp = useSections;
     try {
       for (const target of targets) {
-        onProgress?.({ percent: null, line: spotify ? "Finding the track on YouTube Music…" : "Connecting…" });
+        onProgress?.({
+          percent: null,
+          line: spotify ? "Finding the track on YouTube Music…" : "Getting video info…",
+        });
         stream = 0;
         lastPct = 0;
+        clipping = useSections;
         result = await runYtDlp(tools, [...args, ...sectionArgs, target], runOptions, onProgress);
+        clipping = false;
         checkCancelled();
-        trimmedByYtDlp = hasTrim;
+        trimmedByYtDlp = useSections;
 
-        if (hasTrim && result.code !== 0 && !unrecoverable.test(result.stderr)) {
+        if (useSections && result.code !== 0 && !unrecoverable.test(result.stderr)) {
           // Section downloads are unsupported on some sites/streams.
           // Fall back to the full file and trim locally.
           onProgress?.({ percent: null, line: "Clip download unavailable — downloading full file to trim…" });

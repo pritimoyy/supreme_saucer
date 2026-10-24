@@ -86,9 +86,8 @@ Install location:
 - macOS: `~/Library/Application Support/Supreme Saucer/bin`
 - Windows: `%APPDATA%\Supreme Saucer\bin`
 
-Delete that folder to force a clean reinstall. To ship binaries inside the package instead (offline
-installs), drop them in `src/bin/`; they're picked up first and yt-dlp is copied into the folder
-above so it can still update itself.
+Delete that folder to force a clean reinstall. Nothing is bundled in the `.zxp`/`.ccx`; any yt-dlp,
+FFmpeg or Deno already on the machine (e.g. Homebrew) is only used if it actually runs.
 
 ### 3. Build & Run
 

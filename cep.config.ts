@@ -53,7 +53,9 @@ const config: CEP_Config = {
     jsxBin: "off",
   },
   installModules: [],
-  copyAssets: ["./bin", "./assets"],
+  // The engine (yt-dlp, FFmpeg, Deno) is installed on first run, so no
+  // binaries are bundled; src/bin used to leak local Homebrew stubs in.
+  copyAssets: ["./assets"],
   copyZipAssets: [],
 };
 export default config;

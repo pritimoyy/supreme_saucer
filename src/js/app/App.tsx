@@ -290,6 +290,7 @@ export const App: React.FC<{ backend: Backend }> = ({ backend }) => {
           formatId: !audioOnly && quality ? quality : undefined,
           trimStart: trimOn ? trimStart.trim() : undefined,
           trimEnd: trimOn ? trimEnd.trim() : undefined,
+          duration: info?.duration ?? null,
           cookiesFrom,
         },
         progress

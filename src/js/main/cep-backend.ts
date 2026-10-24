@@ -14,6 +14,9 @@ const unwrap = <T>(result: { ok: boolean; data?: T; error?: string; logs?: strin
   return result.data as T;
 };
 
+// Closing or reloading the panel must not leave yt-dlp/ffmpeg running.
+window.addEventListener("beforeunload", () => downloader.cancel());
+
 export const createCepBackend = (): Backend => ({
   hostName: HOST_NAMES[csi.hostEnvironment?.appName] ?? "your project",
   probe: (request) => downloader.probeUrl(request),

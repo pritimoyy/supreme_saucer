@@ -66,6 +66,8 @@ export type DownloadRequest = {
   audioFormat?: AudioFormat;
   trimStart?: string;
   trimEnd?: string;
+  /** Media length in seconds (from the preview), used to pick the fastest trim strategy. */
+  duration?: number | null;
   cookiesFrom?: CookieBrowser;
 };
 

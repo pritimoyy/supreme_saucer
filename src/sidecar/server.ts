@@ -58,7 +58,7 @@ const streamTask = (
 };
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, version: "1.1.0" });
+  res.json({ ok: true, version: "1.1.1" });
 });
 
 app.post("/probe", async (req, res) => {
