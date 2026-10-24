@@ -169,10 +169,14 @@ export const Settings: React.FC<Props> = ({
           <label className="row">
             <div className="row__text">
               <strong>Import into {hostName}</strong>
-              <small>Adds each download to the “Supreme Saucer” bin.</small>
+              <small>Also adds each download to a “Supreme Saucer” bin in your project.</small>
             </div>
             <Switch checked={importToProject} onChange={onImportToProject} label="Import into project" />
           </label>
+          <p className="fineprint fineprint--wrap">
+            <Icon.Folder /> Files are always saved to a “Supreme Saucer” folder next to your saved project file, so
+            they travel with the project. Save the project once before your first download.
+          </p>
         </section>
 
         <p className="fineprint fineprint--wrap fineprint--center">

@@ -17,7 +17,7 @@ import {
 } from "../../shared/supreme-saucer";
 import type { Backend, EngineAction } from "./backend";
 import { Settings } from "./Settings";
-import { Icon, ProgressBar, Segmented, Spinner, Switch } from "./ui";
+import { Icon, ProgressBar, RangeSlider, Segmented, Spinner, Switch } from "./ui";
 import "./app.scss";
 
 /* ─── Helpers ────────────────────────────────────────────────── */
@@ -71,6 +71,8 @@ type Job =
 type Recent = { id: number; title: string; filePath: string; audio: boolean; imported: boolean };
 
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+/** "/Users/me/Edits/Promo/Supreme Saucer/clip.mp4" → "Promo › Supreme Saucer" */
+const shortFolder = (p: string) => p.split(/[\\/]/).slice(-3, -1).join(" › ");
 
 /* ─── App ────────────────────────────────────────────────────── */
 
@@ -332,7 +334,8 @@ export const App: React.FC<{ backend: Backend }> = ({ backend }) => {
 
   const startSecs = parseTimecode(trimStart);
   const endSecs = parseTimecode(trimEnd);
-  const showRange = trimOn && info?.duration && startSecs !== null && endSecs !== null && endSecs > startSecs;
+  // Short media gets tenth-of-a-second precision on the trim handles.
+  const clipTime = (seconds: number) => formatTimecode(seconds, (info?.duration ?? Infinity) <= 120);
 
   const buttonLabel = !engine?.ready && !spotify
     ? "Install engine & download"
@@ -588,20 +591,24 @@ export const App: React.FC<{ backend: Backend }> = ({ backend }) => {
                 </label>
                 <span className="trim__len">
                   {startSecs !== null && endSecs !== null && endSecs > startSecs
-                    ? formatTimecode(endSecs - startSecs)
+                    ? clipTime(endSecs - startSecs)
                     : "—"}
                 </span>
               </div>
-              {showRange && (
-                <div className="range">
-                  <div
-                    className="range__sel"
-                    style={{
-                      left: `${(startSecs! / info!.duration!) * 100}%`,
-                      width: `${(Math.min(endSecs!, info!.duration!) - startSecs!) / info!.duration! * 100}%`,
-                    }}
-                  />
-                </div>
+              {info?.duration ? (
+                <RangeSlider
+                  duration={info.duration}
+                  start={startSecs !== null ? Math.min(startSecs, info.duration) : 0}
+                  end={endSecs !== null && endSecs > (startSecs ?? 0) ? Math.min(endSecs, info.duration) : info.duration}
+                  onChange={(s, e) => {
+                    setTrimStart(clipTime(s));
+                    setTrimEnd(clipTime(e));
+                  }}
+                  format={clipTime}
+                  disabled={running}
+                />
+              ) : (
+                <span className="field__hint">Type times, e.g. 1:30 → 2:15.</span>
               )}
               {trimError && <span className="field__hint field__hint--bad">{trimError}</span>}
             </>
@@ -631,7 +638,10 @@ export const App: React.FC<{ backend: Backend }> = ({ backend }) => {
         <div className="note note--ok">
           <Icon.Check />
           <span>
-            {job.imported ? `Imported into ${backend.hostName}` : "Saved"} · {baseName(job.filePath)}
+            {job.imported ? `Imported into the “Supreme Saucer” bin` : "Saved"} · {baseName(job.filePath)}
+            <small className="note__sub" title={job.filePath}>
+              <Icon.Folder /> {shortFolder(job.filePath)}
+            </small>
           </span>
           {backend.reveal && (
             <button className="link" onClick={() => backend.reveal!(job.filePath)}>

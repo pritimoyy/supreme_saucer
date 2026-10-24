@@ -152,6 +152,134 @@ export const Spinner: React.FC<{ size?: number }> = ({ size = 14 }) => (
   <span className="spinner" style={{ width: size, height: size }} />
 );
 
+/**
+ * Two-handle timeline for picking a clip. Drag either handle, drag the
+ * highlighted section to slide the whole clip, or click the track to move
+ * the nearest handle there. Arrow keys nudge by 1s (Shift: 10s).
+ */
+export const RangeSlider: React.FC<{
+  duration: number;
+  start: number;
+  end: number;
+  onChange: (start: number, end: number) => void;
+  disabled?: boolean;
+  format: (seconds: number) => string;
+}> = ({ duration, start, end, onChange, disabled, format }) => {
+  const trackRef = React.useRef<HTMLDivElement>(null);
+  const [active, setActive] = React.useState<"start" | "end" | "range" | null>(null);
+  const minGap = Math.min(1, duration / 100);
+  const step = duration <= 120 ? 0.1 : 1;
+
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  const snap = (v: number) => Math.round(v / step) * step;
+  const pct = (v: number) => `${(clamp(v, 0, duration) / duration) * 100}%`;
+
+  const secondsAt = (clientX: number) => {
+    const rect = trackRef.current!.getBoundingClientRect();
+    return snap(clamp((clientX - rect.left) / rect.width, 0, 1) * duration);
+  };
+
+  const beginDrag = (which: "start" | "end" | "range", clientX: number) => {
+    if (disabled) return;
+    setActive(which);
+    const grabAt = secondsAt(clientX);
+    const initial = { start, end };
+
+    const move = (x: number) => {
+      const t = secondsAt(x);
+      if (which === "start") onChange(clamp(t, 0, initial.end - minGap), initial.end);
+      else if (which === "end") onChange(initial.start, clamp(t, initial.start + minGap, duration));
+      else {
+        const length = initial.end - initial.start;
+        const s = clamp(snap(initial.start + (t - grabAt)), 0, duration - length);
+        onChange(s, s + length);
+      }
+    };
+    const onMove = (e: PointerEvent | MouseEvent) => move(e.clientX);
+    const onUp = () => {
+      setActive(null);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // UXP builds without PointerEvent still deliver mouse events.
+    if (typeof window.PointerEvent === "function") {
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    } else {
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    }
+  };
+
+  const onTrackDown = (clientX: number) => {
+    const t = secondsAt(clientX);
+    // Jump the nearest handle to the click, then keep dragging it.
+    if (Math.abs(t - start) <= Math.abs(t - end)) onChange(clamp(t, 0, end - minGap), end);
+    else onChange(start, clamp(t, start + minGap, duration));
+    beginDrag(Math.abs(t - start) <= Math.abs(t - end) ? "start" : "end", clientX);
+  };
+
+  const onKey = (which: "start" | "end") => (e: React.KeyboardEvent) => {
+    const delta = (e.shiftKey ? 10 : 1) * (e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0);
+    if (!delta || disabled) return;
+    e.preventDefault();
+    if (which === "start") onChange(clamp(start + delta, 0, end - minGap), end);
+    else onChange(start, clamp(end + delta, start + minGap, duration));
+  };
+
+  const down = (handler: (x: number) => void) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      handler(e.clientX);
+    },
+    onMouseDown: (e: React.MouseEvent) => {
+      if (typeof window.PointerEvent === "function") return;
+      e.stopPropagation();
+      e.preventDefault();
+      handler(e.clientX);
+    },
+  });
+
+  return (
+    <div className={`slider${disabled ? " is-disabled" : ""}${active ? " is-dragging" : ""}`}>
+      <div className="slider__track" ref={trackRef} {...down(onTrackDown)}>
+        <div className="slider__rail" />
+        <div
+          className={`slider__sel${active === "range" ? " is-active" : ""}`}
+          style={{ left: pct(start), width: `calc(${pct(end)} - ${pct(start)})` }}
+          {...down((x) => beginDrag("range", x))}
+        />
+        {(["start", "end"] as const).map((which) => (
+          <div
+            key={which}
+            className={`slider__handle${active === which ? " is-active" : ""}`}
+            style={{ left: pct(which === "start" ? start : end) }}
+            role="slider"
+            tabIndex={disabled ? -1 : 0}
+            aria-label={which === "start" ? "Clip start" : "Clip end"}
+            aria-valuemin={0}
+            aria-valuemax={duration}
+            aria-valuenow={which === "start" ? start : end}
+            aria-valuetext={format(which === "start" ? start : end)}
+            onKeyDown={onKey(which)}
+            {...down((x) => beginDrag(which, x))}
+          >
+            <span className="slider__tip">{format(which === "start" ? start : end)}</span>
+          </div>
+        ))}
+      </div>
+      <div className="slider__scale">
+        <span>0:00</span>
+        <span>{format(duration / 2)}</span>
+        <span>{format(duration)}</span>
+      </div>
+    </div>
+  );
+};
+
 export const ProgressBar: React.FC<{ percent: number | null }> = ({ percent }) => (
   <div className={`bar${percent === null ? " is-indeterminate" : ""}`}>
     <div className="bar__fill" style={percent === null ? undefined : { width: `${Math.max(2, percent)}%` }} />

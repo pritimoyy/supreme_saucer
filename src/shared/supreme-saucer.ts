@@ -144,12 +144,14 @@ export const validateTrim = (start: string, end: string): string | null => {
   return null;
 };
 
-/** 75 → "1:15", 3725 → "1:02:05" */
-export const formatTimecode = (seconds: number): string => {
-  const total = Math.max(0, Math.round(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
+/** 75 → "1:15", 3725 → "1:02:05"; with `tenths`, 7.4 → "0:07.4". */
+export const formatTimecode = (seconds: number, tenths = false): string => {
+  const total = Math.max(0, tenths ? Math.round(seconds * 10) / 10 : Math.round(seconds));
+  const whole = Math.floor(total);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = whole % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
-  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  const fraction = tenths && total !== whole ? `.${Math.round((total - whole) * 10)}` : "";
+  return (h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`) + fraction;
 };
