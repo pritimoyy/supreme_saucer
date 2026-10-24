@@ -598,7 +598,9 @@ export const createDownloader = (deps: DownloaderDeps) => {
       const { stdout } = await runProcess(file, args, { timeoutMs: 30_000 });
       if (tool === "yt-dlp") return stdout.trim() || null;
       if (tool === "deno") return stdout.match(/deno (\S+)/)?.[1] ?? null;
-      return stdout.match(/version (n?[\d.]+)/)?.[1] ?? stdout.match(/version (\S+?)(-|\s)/)?.[1] ?? null;
+      // "9.0.2-https://www.martin-riedl.de" (macOS) or "N-121357-g1234abcd-20261020" (Windows nightly)
+      const raw = stdout.match(/version (\S+)/)?.[1];
+      return raw ? raw.replace(/-https?:.*$/, "").replace(/^(N-\d+).*$/, "$1") : null;
     } catch {
       return null;
     }
