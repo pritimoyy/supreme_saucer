@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { evalTS, subscribeBackgroundColor } from "../lib/utils/bolt";
-import { downloadMedia, listFormats } from "../lib/download/downloader";
+import { downloadMedia, ensureTools, listFormats } from "../lib/download/downloader";
 import {
   isSupportedUrl,
   isSpotifyUrl,
-  isValidTimecode,
+  validateTrim,
   type QualityMode,
   type YtdlpFormat,
 } from "../../shared/supreme-saucer";
@@ -45,6 +45,25 @@ export const App = () => {
     }
   }, []);
 
+  /* ─── Install / update yt-dlp, ffmpeg and deno in the background ─── */
+  useEffect(() => {
+    if (!window.cep) return;
+    let showedSetup = false;
+    ensureTools(({ line }) => {
+      showedSetup = true;
+      setMessage(line, "info");
+    })
+      .then(() => {
+        if (showedSetup) setMessage("Ready — paste a link to download.", "success");
+      })
+      .catch((error) => {
+        setMessage(
+          `Setup failed: ${error instanceof Error ? error.message : error}. Check your internet connection and reopen the panel.`,
+          "error"
+        );
+      });
+  }, [setMessage]);
+
   /* ─── Paste URL from clipboard ─────────────────────────── */
   const handlePaste = async () => {
     try {
@@ -67,7 +86,9 @@ export const App = () => {
     );
 
     try {
-      const items = await listFormats(url.trim(), audioOnly);
+      const items = await listFormats(url.trim(), audioOnly, ({ line }) => {
+        if (generation === fetchGenerationRef.current) setMessage(line, "info");
+      });
       if (generation !== fetchGenerationRef.current) return;
       setFormats(items);
       setSelectedFormat(items[0]?.id ?? "");
@@ -104,12 +125,9 @@ export const App = () => {
   /* ─── Validation ──────────────────────────────────────── */
   const validate = (): string | null => {
     if (!url.trim()) return "Paste a URL to get started.";
-    if (!isSupportedUrl(url)) return "Unsupported URL — try YouTube, Instagram, Pinterest, or Facebook.";
+    if (!isSupportedUrl(url)) return "That doesn't look like a valid link — paste a full https:// URL.";
     if (quality === "manual" && !audioOnly && !selectedFormat) return "Select a resolution first.";
-    if (trimStart && !isValidTimecode(trimStart)) return "Start time must be HH:MM:SS.";
-    if (trimEnd && !isValidTimecode(trimEnd)) return "End time must be HH:MM:SS.";
-    if ((trimStart && !trimEnd) || (!trimStart && trimEnd)) return "Fill both Start and End, or leave both empty.";
-    return null;
+    return validateTrim(trimStart, trimEnd);
   };
 
   /* ─── Download handler ────────────────────────────────── */
@@ -204,7 +222,7 @@ export const App = () => {
         isSpotify={isSpotify}
         quality={quality}
         setQuality={setQuality}
-        audioOnly={audioOnly}
+        audioOnly={audioOnly || isSpotify}
         setAudioOnly={setAudioOnly}
         formats={formats}
         selectedFormat={selectedFormat}
@@ -229,7 +247,7 @@ export const App = () => {
         isWorking={isWorking}
         showProgress={!!showProgress}
         progress={progress}
-        status={status}
+        status={downloading && progressLine ? progressLine : status}
         statusKind={statusKind}
       />
     </div>

@@ -6,3 +6,5 @@ dist-ssr
 yarn-error.log
 .media
 src/bin/
+# Debug dumps written by ytdl-core
+*-player-script.js

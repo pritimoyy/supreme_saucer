@@ -17,10 +17,10 @@ const config: CEP_Config = {
   ],
 
   type: "Panel",
-  iconDarkNormal: "./src/assets/light-icon.png",
-  iconNormal: "./src/assets/dark-icon.png",
-  iconDarkNormalRollOver: "./src/assets/light-icon.png",
-  iconNormalRollOver: "./src/assets/dark-icon.png",
+  iconDarkNormal: "./assets/light-icon.png",
+  iconNormal: "./assets/dark-icon.png",
+  iconDarkNormalRollOver: "./assets/light-icon.png",
+  iconNormalRollOver: "./assets/dark-icon.png",
   parameters: ["--v=0", "--enable-nodejs", "--mixed-context"],
   width: 500,
   height: 550,
@@ -53,7 +53,7 @@ const config: CEP_Config = {
     jsxBin: "off",
   },
   installModules: [],
-  copyAssets: ["./bin"],
+  copyAssets: ["./bin", "./assets"],
   copyZipAssets: [],
 };
 export default config;

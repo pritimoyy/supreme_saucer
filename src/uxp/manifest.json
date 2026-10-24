@@ -1,0 +1,58 @@
+{
+  "id": "com.pritimoy.supremesaucer",
+  "name": "Supreme Saucer",
+  "version": "1.0.0",
+  "main": "index.html",
+  "manifestVersion": 6,
+  "host": [
+    {
+      "app": "premierePro",
+      "minVersion": "26.0"
+    }
+  ],
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "com.pritimoy.supremesaucer.panel",
+      "label": {
+        "default": "Supreme Saucer"
+      },
+      "minimumSize": {
+        "width": 300,
+        "height": 400
+      },
+      "preferredDockedSize": {
+        "width": 600,
+        "height": 650
+      },
+      "preferredFloatingSize": {
+        "width": 600,
+        "height": 650
+      }
+    }
+  ],
+  "requiredPermissions": {
+    "localFileSystem": "fullAccess",
+    "network": {
+      "domains": ["http://127.0.0.1", "https://fonts.googleapis.com", "https://fonts.gstatic.com"]
+    },
+    "launchProcess": {
+      "schemes": [],
+      "extensions": []
+    },
+    "clipboard": "readAndWrite",
+    "webview": {
+      "allow": "yes",
+      "domains": ["http://127.0.0.1"]
+    }
+  },
+  "icons": [
+    {
+      "width": 48,
+      "height": 48,
+      "path": "icons/icon-48.png",
+      "scale": [1, 2],
+      "theme": ["all"]
+    }
+  ]
+}
