@@ -27,4 +27,4 @@ const downloader = createDownloader({
   ],
 });
 
-export const { ensureTools, listFormats, downloadMedia } = downloader;
+export default downloader;

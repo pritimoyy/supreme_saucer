@@ -1,7 +1,7 @@
 {
   "id": "com.pritimoy.supremesaucer",
   "name": "Supreme Saucer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "index.html",
   "manifestVersion": 6,
   "host": [
@@ -34,7 +34,7 @@
   "requiredPermissions": {
     "localFileSystem": "fullAccess",
     "network": {
-      "domains": ["http://127.0.0.1", "https://fonts.googleapis.com", "https://fonts.gstatic.com"]
+      "domains": "all"
     },
     "launchProcess": {
       "schemes": [],
@@ -43,7 +43,9 @@
     "clipboard": "readAndWrite",
     "webview": {
       "allow": "yes",
-      "domains": ["http://127.0.0.1"]
+      "domains": [
+        "http://127.0.0.1"
+      ]
     }
   },
   "icons": [
@@ -51,8 +53,13 @@
       "width": 48,
       "height": 48,
       "path": "icons/icon-48.png",
-      "scale": [1, 2],
-      "theme": ["all"]
+      "scale": [
+        1,
+        2
+      ],
+      "theme": [
+        "all"
+      ]
     }
   ]
 }

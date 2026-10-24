@@ -14,4 +14,4 @@ const downloader = createDownloader({
   bundledBinDirs: () => [path.join(getExtensionRoot(), "bin")],
 });
 
-export const { ensureTools, listFormats, downloadMedia } = downloader;
+export default downloader;

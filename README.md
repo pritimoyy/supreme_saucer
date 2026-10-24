@@ -8,7 +8,11 @@ With Supreme Saucer, you can paste URLs from YouTube, Instagram, Facebook, X/Twi
 
 - **Direct NLE Import:** Downloads are automatically imported into your active Premiere Pro or After Effects project.
 - **Universal Downloader:** Anything yt-dlp supports — YouTube (up to 4K/60fps), Instagram, Facebook, X/Twitter, TikTok, Pinterest video pins, and more. Spotify tracks are matched to YouTube audio.
-- **Zero setup for users:** yt-dlp, ffmpeg and deno are downloaded automatically on first launch and yt-dlp keeps itself up to date.
+- **One-click engine setup:** a first-run card installs yt-dlp, FFmpeg and Deno; Settings shows versions, checks GitHub for yt-dlp updates (notification + one-click update, or fully automatic), and can repair everything.
+- **Link preview:** title, thumbnail, duration and every available resolution before you download.
+- **Audio only:** MP3 (320 kbps), WAV (for editing) or M4A (original AAC, no re-encode), with tags and cover art.
+- **Browser login:** optional — reads cookies from Chrome/Safari/Firefox/Edge/Brave locally for Instagram, Facebook, X and age-restricted YouTube.
+- **Spotify:** matched against YouTube Music's official audio (the same approach as spotDL; Spotify audio itself is DRM-protected).
 - **Auto-Transcoding:** Automatically converts unsupported codecs (VP9/AV1 video, Opus audio) into Premiere-friendly H.264/AAC behind the scenes.
 - **Smart Formatting:** Choose specific resolutions, frame rates, or grab the audio-only track.
 - **In-Panel Trimming:** Specify start and end times (`1:30` or `00:01:30`) to grab a frame-accurate clip without downloading the whole source.
@@ -126,7 +130,8 @@ Outputs to `dist/sidecar/supreme-saucer-helper`.
 
 ## Troubleshooting
 
-- **"requires sign-in" on Instagram / Facebook / X / Vimeo:** many posts are only visible when logged in, and these sites block anonymous downloads more and more. Public posts usually work.
+- **"requires sign-in" on Instagram / Facebook / X / Vimeo:** open Settings → *Use browser login*, pick the browser you're logged in with and try again. Safari needs Full Disk Access for Premiere/After Effects; Chrome may ask once for keychain access.
 - **Pinterest image pins:** only video pins can be downloaded.
-- **A site suddenly stops working:** yt-dlp updates itself automatically; reopen the panel or try again a minute later. You can also delete the tools folder (see above) to reinstall.
+- **A site suddenly stops working:** Settings → *Update now* (or turn on *Update automatically*). Still broken? Settings → *Repair* reinstalls every tool.
+- **Previewing the UI without Premiere:** `npm run dev` and open `http://localhost:3000/main/index.html` — a simulated backend is used outside Adobe apps (`?engine=missing` / `?engine=old` show the setup and update states).
 
