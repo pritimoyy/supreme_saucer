@@ -32,7 +32,10 @@ export const createCepBackend = (): Backend => ({
         : downloader.repairEngine(onProgress),
   setAutoUpdate: async (enabled) => downloader.setAutoUpdate(enabled),
   reveal: (filePath) => {
-    if (os.platform() === "win32") child_process.spawn("explorer", [`/select,${filePath}`]);
+    // Explorer needs exactly `/select,"C:\path with spaces\file.mp4"`, so skip Node's own quoting.
+    if (os.platform() === "win32") {
+      child_process.spawn("explorer.exe", [`/select,"${filePath}"`], { windowsVerbatimArguments: true });
+    }
     else child_process.spawn("open", ["-R", filePath]);
   },
 });

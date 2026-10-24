@@ -1,0 +1,58 @@
+name: CI
+
+# Builds the panels and helper and runs real downloads on macOS and Windows,
+# so Windows support is verified on an actual Windows machine.
+on:
+  push:
+    branches: [main, "fix/**", "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build CEP panel (type-checks too)
+        run: npm run build
+
+      - name: Build UXP panel
+        run: npm run build:uxp
+
+      - name: Engine smoke test (install tools, download, trim, convert, audio, cancel)
+        run: npx tsx scripts/smoke-engine.ts
+
+      - name: Build helper for this OS
+        run: |
+          npx esbuild src/sidecar/server.ts --bundle --platform=node --target=node18 --outfile=dist/sidecar/server.js
+          if [ "$RUNNER_OS" = "Windows" ]; then TARGET=node18-win-x64; else TARGET=node18-macos-arm64; fi
+          npx -y pkg@5.8.1 dist/sidecar/server.js --targets "$TARGET" --output dist/sidecar/helper
+
+      - name: Helper starts and answers
+        run: |
+          BIN=dist/sidecar/helper; [ "$RUNNER_OS" = "Windows" ] && BIN=dist/sidecar/helper.exe
+          SAUCER_PORT=9150 "$BIN" > helper.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:9150/health && break; sleep 1; done
+          echo
+          curl -sf http://127.0.0.1:9150/engine | tee engine.json
+          grep -q '"ready":true' engine.json
+          curl -sf -X POST http://127.0.0.1:9150/probe -H 'content-type: application/json' \
+            -d '{"url":"https://download.samplelib.com/mp4/sample-5s.mp4"}' | tee probe.json
+          grep -q '"ok":true' probe.json
+          cat helper.log

@@ -79,6 +79,7 @@ const ERROR_HINTS: [RegExp, string][] = [
   ],
   [/could not (find|copy) .*cookies|cookies database|keyring/i, "Couldn't read your browser's login. Close the browser and try again, or pick another browser in Settings."],
   [/unsupported url/i, "This site or link isn't supported."],
+  [/unable to obtain file audio codec|does not contain any stream|no audio/i, "This video has no audio track."],
   [
     /no video formats found|no formats found|there is no video in this/i,
     "No downloadable video was found at this link (image posts aren't supported).",
@@ -193,14 +194,30 @@ export const createDownloader = (deps: DownloaderDeps) => {
   const active = new Set<import("child_process").ChildProcess>();
   let generation = 0;
 
-  /** Stops every running download/conversion. */
-  const cancel = () => {
-    generation++;
-    for (const child of active) {
+  /**
+   * Kill a process and everything it started (yt-dlp runs ffmpeg as a child;
+   * killing only yt-dlp would leave ffmpeg running and the file locked).
+   */
+  const killTree = (child: import("child_process").ChildProcess) => {
+    try {
+      if (isWin && child.pid) {
+        child_process.spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+      } else if (child.pid) {
+        process.kill(-child.pid, "SIGTERM"); // whole process group (spawned detached)
+      } else {
+        child.kill();
+      }
+    } catch (_) {
       try {
         child.kill();
       } catch (_) {}
     }
+  };
+
+  /** Stops every running download/conversion. */
+  const cancel = () => {
+    generation++;
+    for (const child of active) killTree(child);
   };
 
   const runProcess = (binary: string, args: string[], options: RunOptions = {}): Promise<RunResult> =>
@@ -221,7 +238,9 @@ export const createDownloader = (deps: DownloaderDeps) => {
       if (isMac && !childEnv.SSL_CERT_FILE && isFile("/etc/ssl/cert.pem")) {
         childEnv.SSL_CERT_FILE = "/etc/ssl/cert.pem";
       }
-      const child = child_process.spawn(binary, args, { windowsHide: true, env: childEnv });
+      // On macOS/Linux, `detached` makes the child a process-group leader so
+      // killTree can stop its children too.
+      const child = child_process.spawn(binary, args, { windowsHide: true, env: childEnv, detached: !isWin });
       active.add(child);
       let stdout = "";
       let stderr = "";
@@ -240,9 +259,7 @@ export const createDownloader = (deps: DownloaderDeps) => {
 
       const kill = (reason: string) =>
         finish(() => {
-          try {
-            child.kill();
-          } catch (_) {}
+          killTree(child);
           reject(new Error(reason));
         });
 
@@ -985,16 +1002,18 @@ export const createDownloader = (deps: DownloaderDeps) => {
     return file;
   };
 
-  /** Remove partial files left behind by a cancelled or failed download. */
-  const cleanupPartials = (dir: string, since: number) => {
+  /** "Title.mp4" → "Title (2).mp4" … so earlier downloads are never overwritten. */
+  const uniquePath = (dir: string, fileName: string) => {
+    const ext = path.extname(fileName);
+    const base = path.basename(fileName, ext);
+    let candidate = path.join(dir, fileName);
+    for (let n = 2; fs.existsSync(candidate); n++) candidate = path.join(dir, `${base} (${n})${ext}`);
+    return candidate;
+  };
+
+  const removeDir = (dir: string) => {
     try {
-      for (const name of fs.readdirSync(dir)) {
-        if (!/\.(part|ytdl|temp)$|\.part-Frag\d+|\.converting\.|\.f\d+\.\w+$/i.test(name)) continue;
-        const full = path.join(dir, name);
-        try {
-          if (fs.statSync(full).mtimeMs >= since) fs.unlinkSync(full);
-        } catch (_) {}
-      }
+      fs.rmSync(dir, { recursive: true, force: true });
     } catch (_) {}
   };
 
@@ -1004,11 +1023,10 @@ export const createDownloader = (deps: DownloaderDeps) => {
   const FILE_TAG = "[saucer-file]";
 
   const safeName = (s: string) =>
-    s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/%/g, "%%").trim().slice(0, 150);
+    s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/%/g, "%%").trim().slice(0, isWin ? 80 : 150);
 
   const downloadMedia = async (request: DownloadRequest, onProgress?: ProgressFn): Promise<DownloadResult> => {
     const myGeneration = generation;
-    const startedAt = Date.now();
     const checkCancelled = () => {
       if (generation !== myGeneration) throw new Error(CANCELLED_MESSAGE);
     };
@@ -1022,7 +1040,8 @@ export const createDownloader = (deps: DownloaderDeps) => {
     // find the same track on YouTube Music — its "Songs" results are the
     // official audio uploads.
     let targets = [url];
-    let nameTemplate = "%(title).150B [%(id)s]";
+    // Windows paths max out at 260 characters, so keep titles shorter there.
+    let nameTemplate = `%(title).${isWin ? 80 : 150}B [%(id)s]`;
     if (spotify) {
       onProgress?.({ percent: null, line: "Reading Spotify track…" });
       const track = await readSpotifyTrack(url);
@@ -1036,7 +1055,12 @@ export const createDownloader = (deps: DownloaderDeps) => {
 
     const tools = await ensureTools(onProgress);
     checkCancelled();
-    fs.mkdirSync(request.outputDir, { recursive: true });
+    // Work in a private folder: yt-dlp's audio extraction deletes its source
+    // file and conversions replace files, so doing that directly in the
+    // download folder could destroy an earlier download with the same name.
+    // The finished file is moved out under a unique name.
+    const workDir = path.join(request.outputDir, `.saucer-${Date.now()}`);
+    fs.mkdirSync(workDir, { recursive: true });
 
     const start = request.trimStart ? parseTimecode(request.trimStart) : null;
     const end = request.trimEnd ? parseTimecode(request.trimEnd) : null;
@@ -1057,7 +1081,7 @@ export const createDownloader = (deps: DownloaderDeps) => {
       "--print",
       `after_move:${FILE_TAG}%(filepath)s`,
       "-o",
-      path.join(request.outputDir, `${nameTemplate}${trimSuffix}.%(ext)s`),
+      path.join(workDir, `${nameTemplate}${trimSuffix}.%(ext)s`),
     ];
 
     if (audioFormat) {
@@ -1154,12 +1178,15 @@ export const createDownloader = (deps: DownloaderDeps) => {
         checkCancelled();
       }
 
+      const finalPath = uniquePath(request.outputDir, path.basename(filePath));
+      fs.renameSync(filePath, finalPath);
       onProgress?.({ percent: 100, line: "Done." });
-      return { filePath };
+      return { filePath: finalPath };
     } catch (error) {
-      cleanupPartials(request.outputDir, startedAt);
       if (generation !== myGeneration) throw new Error(CANCELLED_MESSAGE);
       throw error;
+    } finally {
+      removeDir(workDir);
     }
   };
 

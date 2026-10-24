@@ -29,11 +29,8 @@ const config: UXP_Config = {
     requiredPermissions: {
       localFileSystem: "fullAccess",
       network: {
-        domains: [
-          "http://127.0.0.1",
-          "https://fonts.googleapis.com",
-          "https://fonts.gstatic.com",
-        ],
+        // The helper (127.0.0.1) plus thumbnails from any CDN (ytimg, scdn, twimg…).
+        domains: "all",
       },
       launchProcess: {
         schemes: [],

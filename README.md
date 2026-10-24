@@ -25,26 +25,17 @@ With Supreme Saucer, you can paste URLs from YouTube, Instagram, Facebook, X/Twi
 | Premiere Pro 2025 and earlier | CEP Extension (`.zxp`) | ✅ Legacy |
 | After Effects (all versions) | CEP Extension (`.zxp`) | ✅ Legacy |
 
-## Installation — Premiere Pro 2026+ (UXP)
+## Installation
 
-Premiere Pro 2026 uses Adobe's new **UXP** platform. Supreme Saucer ships as a UXP plugin with a companion **Helper app** (sidecar) that handles downloads.
+Download the files from the [latest release](https://github.com/pritimoyy/supreme_saucer/releases/latest)
+and follow **[INSTALL.md](INSTALL.md)**. It has step-by-step instructions for macOS and Windows:
 
-1. Go to the [Releases](https://github.com/yourusername/supreme-saucer/releases) page.
-2. Download **`SupremeSaucer-UXP.zip`** — this contains:
-   - The `.ccx` plugin file
-   - The `supreme-saucer-helper` companion app
-3. Install the `.ccx` plugin using the [UXP Developer Tool](https://developer.adobe.com/premiere-pro/uxp) or by placing it in your UXP plugins folder.
-4. Launch the **Supreme Saucer Helper** app (it runs in the background on `localhost:9150`).
-5. Open Premiere Pro → `Plugins > Supreme Saucer` to open the panel.
+| Your app | What to install |
+|---|---|
+| After Effects (any) / Premiere Pro 2025 and older | `SupremeSaucer-<version>.zxp` via ZXP Installer |
+| Premiere Pro 2026+ | `SupremeSaucer-<version>-Premiere2026.ccx` + the Helper app for your OS |
 
-> **Note:** The Helper app must be running for downloads to work. It handles `yt-dlp` and `ffmpeg` execution since UXP plugins are sandboxed. On first start it downloads its tools automatically (about 30 seconds).
-
-## Installation — After Effects / Premiere Pro 2025 (CEP)
-
-1. Download the latest `com.pritimoy.supremesaucer.zxp` from [Releases](https://github.com/yourusername/supreme-saucer/releases).
-2. Install the `.zxp` file using [aescripts ZXP Installer](https://aescripts.com/learn/zxp-installer/) or [Anastasiy's Extension Manager](https://install.anastasiy.com/).
-3. Restart Premiere Pro or After Effects.
-4. Navigate to `Window > Extensions > Supreme Saucer` to open the panel.
+No yt-dlp/FFmpeg install needed — the panel sets them up on first launch.
 
 ## Architecture
 
@@ -76,7 +67,7 @@ Premiere Pro 2026 uses Adobe's new **UXP** platform. Supreme Saucer ships as a U
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/yourusername/supreme-saucer.git
+git clone https://github.com/pritimoyy/supreme_saucer.git
 cd supreme-saucer
 npm install
 ```
@@ -123,7 +114,19 @@ Then load the plugin in Premiere Pro using the [UXP Developer Tool](https://deve
 ```bash
 npm run build:sidecar
 ```
-Outputs to `dist/sidecar/supreme-saucer-helper`.
+Outputs macOS (Apple Silicon + Intel) and Windows binaries to `dist/sidecar/bin/`.
+
+#### Release files
+```bash
+npm run release
+```
+Builds everything and puts the `.zxp`, `.ccx`, Helper zips and `INSTALL.md` in `dist/release/`.
+
+#### Tests
+```bash
+npx tsx scripts/smoke-engine.ts
+```
+Installs the engine and runs real downloads (trim, conversion, audio, cancel). CI runs this on macOS and Windows.
 
 ---
 *CEP build powered by [Bolt CEP](https://github.com/hyperbrew/bolt-cep) · UXP build powered by [Bolt UXP](https://github.com/hyperbrew/bolt-uxp)*
